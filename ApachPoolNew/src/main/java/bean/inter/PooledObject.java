@@ -41,21 +41,8 @@ public interface PooledObject<T> extends Comparable<PooledObject<T>> {
     
     void setLogAbandoned(boolean logAbandoned);
 
-    /**
-     * Return an estimate of the last time this object was used. If the class of the pooled object implements {@link TrackedUse}, what is returned is the
-     * maximum of {@link TrackedUse#getLastUsed()} and {@link #getLastBorrowTime()}; otherwise this method gives the same value as {@link #getLastBorrowTime()}.
-     * 
-     * @return the last time this object was used
-     */
     long getLastUsedTime();
 
-    /**
-     * Orders instances based on idle time - i.e. the length of time since the instance was returned to the pool. Used by the GKOP idle object evictor.
-     * <p>
-     * Note: This class has a natural ordering that is inconsistent with equals if distinct objects have the same identity hash code.
-     * <p>
-     * {@inheritDoc}
-     */
     @Override
     int compareTo(PooledObject<T> other);
 

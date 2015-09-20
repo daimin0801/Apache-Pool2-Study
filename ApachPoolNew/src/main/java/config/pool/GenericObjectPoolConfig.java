@@ -1,4 +1,4 @@
-package config;
+package config.pool;
 
 public class GenericObjectPoolConfig extends BaseObjectPoolConfig {
 
