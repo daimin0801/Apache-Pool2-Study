@@ -1,4 +1,6 @@
-package config.pool;
+package config.pool.impl;
+
+import config.pool.BaseObjectPoolConfig;
 
 public class GenericObjectPoolConfig extends BaseObjectPoolConfig {
 

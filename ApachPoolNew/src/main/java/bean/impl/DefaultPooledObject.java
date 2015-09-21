@@ -32,6 +32,47 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
     public T getObject() {
         return object;
     }
+    
+    @Override
+    public synchronized PooledObjectState getState() {
+        return state;
+    }
+    
+    
+    @Override
+    public void printStackTrace(PrintWriter writer) {
+        Exception borrowedByCopy = this.borrowedBy;
+        if (borrowedByCopy != null) {
+            borrowedByCopy.printStackTrace(writer);
+        }
+        Exception usedByCopy = this.usedBy;
+        if (usedByCopy != null) {
+            usedByCopy.printStackTrace(writer);
+        }
+    }
+    
+    @Override
+    public synchronized boolean allocate() {
+        if (state == PooledObjectState.IDLE) {
+            state = PooledObjectState.ALLOCATED;
+            lastBorrowTime = System.currentTimeMillis();
+            lastUseTime = lastBorrowTime;
+            borrowedCount++;
+            if (logAbandoned) {
+                borrowedBy = new AbandonedObjectCreatedException();
+            }
+            return true;
+        } else if (state == PooledObjectState.EVICTION) {
+            // TODO Allocate anyway and ignore eviction test
+            state = PooledObjectState.EVICTION_RETURN_TO_HEAD;
+            return false;
+        }
+        return false;
+    }
+    
+    
+    
+    
 
     @Override
     public long getCreateTime() {
@@ -70,22 +111,10 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         return lastReturnTime;
     }
 
-    /**
-     * Get the number of times this object has been borrowed.
-     * 
-     * @return The number of times this object has been borrowed.
-     * @since 2.1
-     */
     public long getBorrowedCount() {
         return borrowedCount;
     }
 
-    /**
-     * Return an estimate of the last time this object was used. If the class of the pooled object implements {@link TrackedUse}, what is returned is the
-     * maximum of {@link TrackedUse#getLastUsed()} and {@link #getLastBorrowTime()}; otherwise this method gives the same value as {@link #getLastBorrowTime()}.
-     * 
-     * @return the last time this object was used
-     */
     @Override
     public long getLastUsedTime() {
         if (object instanceof TrackedUse) {
@@ -147,31 +176,7 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         return false;
     }
 
-    /**
-     * Allocates the object.
-     * 
-     * @return {@code true} if the original state was {@link PooledObjectState#IDLE IDLE}
-     */
-    @Override
-    public synchronized boolean allocate() {
-        if (state == PooledObjectState.IDLE) {
-            state = PooledObjectState.ALLOCATED;
-            lastBorrowTime = System.currentTimeMillis();
-            lastUseTime = lastBorrowTime;
-            borrowedCount++;
-            if (logAbandoned) {
-                borrowedBy = new AbandonedObjectCreatedException();
-            }
-            return true;
-        } else if (state == PooledObjectState.EVICTION) {
-            // TODO Allocate anyway and ignore eviction test
-            state = PooledObjectState.EVICTION_RETURN_TO_HEAD;
-            return false;
-        }
-        // TODO if validating and testOnBorrow == true then pre-allocate for
-        // performance
-        return false;
-    }
+   
 
     /**
      * Deallocates the object and sets it {@link PooledObjectState#IDLE IDLE} if it is currently {@link PooledObjectState#ALLOCATED ALLOCATED}.
@@ -204,39 +209,15 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         usedBy = new Exception("The last code to use this object was:");
     }
 
-    @Override
-    public void printStackTrace(PrintWriter writer) {
-        Exception borrowedByCopy = this.borrowedBy;
-        if (borrowedByCopy != null) {
-            borrowedByCopy.printStackTrace(writer);
-        }
-        Exception usedByCopy = this.usedBy;
-        if (usedByCopy != null) {
-            usedByCopy.printStackTrace(writer);
-        }
-    }
+  
 
-    /**
-     * Returns the state of this object.
-     * 
-     * @return state
-     */
-    @Override
-    public synchronized PooledObjectState getState() {
-        return state;
-    }
+   
 
-    /**
-     * Marks the pooled object as abandoned.
-     */
     @Override
     public synchronized void markAbandoned() {
         state = PooledObjectState.ABANDONED;
     }
 
-    /**
-     * Marks the object as returning to the pool.
-     */
     @Override
     public synchronized void markReturning() {
         state = PooledObjectState.RETURNING;
