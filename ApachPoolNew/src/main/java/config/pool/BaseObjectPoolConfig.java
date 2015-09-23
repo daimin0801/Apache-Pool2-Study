@@ -3,7 +3,7 @@ package config.pool;
 /**
  * 
  * @Author daimin
- * @Description 抽象连接池的的配置 
+ * @Description 抽象连接池的的配置
  */
 public abstract class BaseObjectPoolConfig implements Cloneable {
 
@@ -41,14 +41,12 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
     private long softMinEvictableIdleTimeMillis = DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS;
     private long timeBetweenEvictionRunsMillis = DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS;
 
-
     private int numTestsPerEvictionRun = DEFAULT_NUM_TESTS_PER_EVICTION_RUN;
-
 
     private boolean testOnCreate = DEFAULT_TEST_ON_CREATE;
     private boolean testOnBorrow = DEFAULT_TEST_ON_BORROW;
     private boolean testOnReturn = DEFAULT_TEST_ON_RETURN;
-    private boolean testWhileIdle = DEFAULT_TEST_WHILE_IDLE;//jedi使用
+    private boolean testWhileIdle = DEFAULT_TEST_WHILE_IDLE;// jedi使用
 
     private boolean blockWhenExhausted = DEFAULT_BLOCK_WHEN_EXHAUSTED;
 
@@ -56,7 +54,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
     private String jmxNamePrefix = DEFAULT_JMX_NAME_PREFIX;
     private String jmxNameBase = DEFAULT_JMX_NAME_PREFIX;
 
-    public boolean isLifo() {
+    public boolean getLifo() {
         return lifo;
     }
 
@@ -64,7 +62,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.lifo = lifo;
     }
 
-    public boolean isFairness() {
+    public boolean getFairness() {
         return fairness;
     }
 
@@ -112,7 +110,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.evictionPolicyClassName = evictionPolicyClassName;
     }
 
-    public boolean isTestOnCreate() {
+    public boolean getTestOnCreate() {
         return testOnCreate;
     }
 
@@ -120,7 +118,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.testOnCreate = testOnCreate;
     }
 
-    public boolean isTestOnBorrow() {
+    public boolean getTestOnBorrow() {
         return testOnBorrow;
     }
 
@@ -128,7 +126,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.testOnBorrow = testOnBorrow;
     }
 
-    public boolean isTestOnReturn() {
+    public boolean getTestOnReturn() {
         return testOnReturn;
     }
 
@@ -136,7 +134,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.testOnReturn = testOnReturn;
     }
 
-    public boolean isTestWhileIdle() {
+    public boolean getTestWhileIdle() {
         return testWhileIdle;
     }
 
@@ -152,7 +150,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.timeBetweenEvictionRunsMillis = timeBetweenEvictionRunsMillis;
     }
 
-    public boolean isBlockWhenExhausted() {
+    public boolean getBlockWhenExhausted() {
         return blockWhenExhausted;
     }
 
@@ -160,7 +158,7 @@ public abstract class BaseObjectPoolConfig implements Cloneable {
         this.blockWhenExhausted = blockWhenExhausted;
     }
 
-    public boolean isJmxEnabled() {
+    public boolean getJmxEnabled() {
         return jmxEnabled;
     }
 

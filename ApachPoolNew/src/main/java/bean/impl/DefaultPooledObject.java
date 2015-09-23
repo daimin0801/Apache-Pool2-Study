@@ -32,13 +32,12 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
     public T getObject() {
         return object;
     }
-    
+
     @Override
     public synchronized PooledObjectState getState() {
         return state;
     }
-    
-    
+
     @Override
     public void printStackTrace(PrintWriter writer) {
         Exception borrowedByCopy = this.borrowedBy;
@@ -50,7 +49,7 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
             usedByCopy.printStackTrace(writer);
         }
     }
-    
+
     @Override
     public synchronized boolean allocate() {
         if (state == PooledObjectState.IDLE) {
@@ -69,10 +68,6 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         }
         return false;
     }
-    
-    
-    
-    
 
     @Override
     public long getCreateTime() {
@@ -176,8 +171,6 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         return false;
     }
 
-   
-
     /**
      * Deallocates the object and sets it {@link PooledObjectState#IDLE IDLE} if it is currently {@link PooledObjectState#ALLOCATED ALLOCATED}.
      * 
@@ -208,10 +201,6 @@ public class DefaultPooledObject<T> implements PooledObject<T> {
         lastUseTime = System.currentTimeMillis();
         usedBy = new Exception("The last code to use this object was:");
     }
-
-  
-
-   
 
     @Override
     public synchronized void markAbandoned() {
