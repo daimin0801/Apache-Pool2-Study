@@ -1,4 +1,4 @@
-package bean.assist;
+package bean.inter.pool.base.assist;
 
 import java.util.concurrent.atomic.AtomicLong;
 

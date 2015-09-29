@@ -14,15 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package bean.inter.pool;
+package bean.inter.pool.base;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
-import java.util.Deque;
-import java.util.Iterator;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,6 +34,8 @@ import javax.management.ObjectName;
 
 import bean.inter.PooledObject;
 import bean.inter.assist.SwallowedExceptionListener;
+import bean.inter.pool.base.assist.EvictionIterator;
+import bean.inter.pool.base.assist.StatsStore;
 import config.evict.EvictionPolicy;
 import config.pool.BaseObjectPoolConfig;
 import config.pool.impl.GenericKeyedObjectPoolConfig;
@@ -60,18 +60,22 @@ public abstract class BaseGenericObjectPool<T> {
     private volatile boolean testOnReturn = BaseObjectPoolConfig.DEFAULT_TEST_ON_RETURN;
     private volatile boolean testWhileIdle = BaseObjectPoolConfig.DEFAULT_TEST_WHILE_IDLE;
 
+    /** 在空闲连接回收器线程运行期间休眠的时间值,以毫秒为单位. 如果设置为非正数,则不运行空闲连接回收器线程 **/
     private volatile long timeBetweenEvictionRunsMillis = BaseObjectPoolConfig.DEFAULT_TIME_BETWEEN_EVICTION_RUNS_MILLIS;
+
+    /** 在每次空闲连接回收器线程(如果有)运行时检查的连接数量 **/
     private volatile int numTestsPerEvictionRun = BaseObjectPoolConfig.DEFAULT_NUM_TESTS_PER_EVICTION_RUN;
+
+    /** 连接在池中保持空闲而不被空闲连接回收器线程(如果有)回收的最小时间值，单位毫秒 **/
     private volatile long minEvictableIdleTimeMillis = BaseObjectPoolConfig.DEFAULT_MIN_EVICTABLE_IDLE_TIME_MILLIS;
+
     private volatile long softMinEvictableIdleTimeMillis = BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_TIME_MILLIS;
     private volatile EvictionPolicy<T> evictionPolicy;
 
     // Internal (primarily state) attributes
-    final Object closeLock = new Object();
-    volatile boolean closed = false;
-    final Object evictionLock = new Object();
-    private Evictor evictor = null; // @GuardedBy("evictionLock")
-    EvictionIterator evictionIterator = null; // @GuardedBy("evictionLock")
+    protected final Object closeLock = new Object();
+    protected volatile boolean closed = false;
+
     /*
      * Class loader for evictor thread to use since, in a JavaEE or similar environment, the context class loader for the evictor thread may not have visibility
      * of the correct factory. See POOL-161. Uses a weak reference to avoid potential memory leaks if the Pool is discarded rather than closed.
@@ -82,10 +86,10 @@ public abstract class BaseGenericObjectPool<T> {
     private final String creationStackTrace;
     private final AtomicLong borrowedCount = new AtomicLong(0);
     private final AtomicLong returnedCount = new AtomicLong(0);
-    final AtomicLong createdCount = new AtomicLong(0);
-    final AtomicLong destroyedCount = new AtomicLong(0);
-    final AtomicLong destroyedByEvictorCount = new AtomicLong(0);
-    final AtomicLong destroyedByBorrowValidationCount = new AtomicLong(0);
+    protected final AtomicLong createdCount = new AtomicLong(0);
+    protected final AtomicLong destroyedCount = new AtomicLong(0);
+    protected final AtomicLong destroyedByEvictorCount = new AtomicLong(0);
+    protected final AtomicLong destroyedByBorrowValidationCount = new AtomicLong(0);
 
     private final StatsStore activeTimes = new StatsStore(MEAN_TIMING_STATS_CACHE_SIZE);
     private final StatsStore idleTimes = new StatsStore(MEAN_TIMING_STATS_CACHE_SIZE);
@@ -181,21 +185,16 @@ public abstract class BaseGenericObjectPool<T> {
         this.testWhileIdle = testWhileIdle;
     }
 
-    public final long getTimeBetweenEvictionRunsMillis() {
-        return timeBetweenEvictionRunsMillis;
-    }
-
-    public final void setTimeBetweenEvictionRunsMillis(long timeBetweenEvictionRunsMillis) {
-        this.timeBetweenEvictionRunsMillis = timeBetweenEvictionRunsMillis;
-        startEvictor(timeBetweenEvictionRunsMillis);
-    }
-
     public final int getNumTestsPerEvictionRun() {
         return numTestsPerEvictionRun;
     }
 
     public final void setNumTestsPerEvictionRun(int numTestsPerEvictionRun) {
         this.numTestsPerEvictionRun = numTestsPerEvictionRun;
+    }
+
+    public final void setMinEvictableIdleTimeMillis(long minEvictableIdleTimeMillis) {
+        this.minEvictableIdleTimeMillis = minEvictableIdleTimeMillis;
     }
 
     public final long getMinEvictableIdleTimeMillis() {
@@ -244,33 +243,15 @@ public abstract class BaseGenericObjectPool<T> {
         return closed;
     }
 
-    public abstract void evict() throws Exception;
-
     protected EvictionPolicy<T> getEvictionPolicy() {
         return evictionPolicy;
     }
 
-    final void assertOpen() throws IllegalStateException {
+    protected final void assertOpen() throws IllegalStateException {
         if (isClosed()) {
             throw new IllegalStateException("Pool not open");
         }
     }
-
-    final void startEvictor(long delay) {
-        synchronized (evictionLock) {
-            if (null != evictor) {
-                EvictionTimer.cancel(evictor);
-                evictor = null;
-                evictionIterator = null;
-            }
-            if (delay > 0) {
-                evictor = new Evictor();
-                EvictionTimer.schedule(evictor, delay, delay);
-            }
-        }
-    }
-
-    abstract void ensureMinIdle() throws Exception;
 
     public final ObjectName getJmxName() {
         return oname;
@@ -321,6 +302,9 @@ public abstract class BaseGenericObjectPool<T> {
     }
 
     public abstract int getNumIdle();
+    
+    
+    
 
     public final SwallowedExceptionListener getSwallowedExceptionListener() {
         return swallowedExceptionListener;
@@ -330,7 +314,7 @@ public abstract class BaseGenericObjectPool<T> {
         this.swallowedExceptionListener = swallowedExceptionListener;
     }
 
-    final void swallowException(Exception e) {
+    protected final void swallowException(Exception e) {
         SwallowedExceptionListener listener = getSwallowedExceptionListener();
 
         if (listener == null) {
@@ -348,15 +332,7 @@ public abstract class BaseGenericObjectPool<T> {
         }
     }
 
-    /**
-     * Updates statistics after an object is borrowed from the pool.
-     * 
-     * @param p
-     *            object borrowed from the pool
-     * @param waitTime
-     *            time (in milliseconds) that the borrowing thread had to wait
-     */
-    final void updateStatsBorrow(PooledObject<T> p, long waitTime) {
+    protected final void updateStatsBorrow(PooledObject<T> p, long waitTime) {
         borrowedCount.incrementAndGet();
         idleTimes.add(p.getIdleTimeMillis());
         waitTimes.add(waitTime);
@@ -371,44 +347,11 @@ public abstract class BaseGenericObjectPool<T> {
         } while (!maxBorrowWaitTimeMillis.compareAndSet(currentMax, waitTime));
     }
 
-    /**
-     * Updates statistics after an object is returned to the pool.
-     * 
-     * @param activeTime
-     *            the amount of time (in milliseconds) that the returning object was checked out
-     */
-    final void updateStatsReturn(long activeTime) {
+    protected final void updateStatsReturn(long activeTime) {
         returnedCount.incrementAndGet();
         activeTimes.add(activeTime);
     }
 
-    /**
-     * Unregisters this pool's MBean.
-     */
-    final void jmxUnregister() {
-        if (oname != null) {
-            try {
-                ManagementFactory.getPlatformMBeanServer().unregisterMBean(oname);
-            } catch (MBeanRegistrationException e) {
-                swallowException(e);
-            } catch (InstanceNotFoundException e) {
-                swallowException(e);
-            }
-        }
-    }
-
-    /**
-     * Registers the pool with the platform MBean server. The registered name will be <code>jmxNameBase + jmxNamePrefix + i</code> where i is the least integer
-     * greater than or equal to 1 such that the name is not already registered. Swallows MBeanRegistrationException, NotCompliantMBeanException returning null.
-     * 
-     * @param config
-     *            Pool configuration
-     * @param jmxNameBase
-     *            default base JMX name for this pool
-     * @param jmxNamePrefix
-     *            name prefix
-     * @return registered ObjectName, null if registration fails
-     */
     private ObjectName jmxRegister(BaseObjectPoolConfig config, String jmxNameBase, String jmxNamePrefix) {
         ObjectName objectName = null;
         MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
@@ -454,6 +397,18 @@ public abstract class BaseGenericObjectPool<T> {
         return objectName;
     }
 
+    protected final void jmxUnregister() {
+        if (oname != null) {
+            try {
+                ManagementFactory.getPlatformMBeanServer().unregisterMBean(oname);
+            } catch (MBeanRegistrationException e) {
+                swallowException(e);
+            } catch (InstanceNotFoundException e) {
+                swallowException(e);
+            }
+        }
+    }
+
     private String getStackTrace(Exception e) {
         Writer w = new StringWriter();
         PrintWriter pw = new PrintWriter(w);
@@ -461,25 +416,39 @@ public abstract class BaseGenericObjectPool<T> {
         return w.toString();
     }
 
-    // Inner classes
+    public final long getTimeBetweenEvictionRunsMillis() {
+        return timeBetweenEvictionRunsMillis;
+    }
 
-    /**
-     * The idle object evictor {@link TimerTask}.
-     * 
-     * @see GenericKeyedObjectPool#setTimeBetweenEvictionRunsMillis
-     */
+    public final void setTimeBetweenEvictionRunsMillis(long timeBetweenEvictionRunsMillis) {
+        this.timeBetweenEvictionRunsMillis = timeBetweenEvictionRunsMillis;
+        startEvictor(timeBetweenEvictionRunsMillis);
+    }
+
+    protected final Object evictionLock = new Object();
+    private Evictor evictor = null; // @GuardedBy("evictionLock")
+    protected EvictionIterator evictionIterator = null; // @GuardedBy("evictionLock")
+
+    protected final void startEvictor(long delay) {
+        synchronized (evictionLock) {
+            if (null != evictor) {
+                EvictionTimer.cancel(evictor);
+                evictor = null;
+                evictionIterator = null;
+            }
+            if (delay > 0) {
+                evictor = new Evictor();
+                EvictionTimer.schedule(evictor, delay, delay);
+            }
+        }
+    }
+
     class Evictor extends TimerTask {
-        /**
-         * Run pool maintenance. Evict objects qualifying for eviction and then ensure that the minimum number of idle instances are available. Since the Timer
-         * that invokes Evictors is shared for all Pools but pools may exist in different class loaders, the Evictor ensures that any actions taken are under
-         * the class loader of the factory associated with the pool.
-         */
         @Override
         public void run() {
             ClassLoader savedClassLoader = Thread.currentThread().getContextClassLoader();
             try {
                 if (factoryClassLoader != null) {
-                    // Set the class loader for the factory
                     ClassLoader cl = factoryClassLoader.get();
                     if (cl == null) {
                         // The pool has been dereferenced and the class loader
@@ -491,178 +460,26 @@ public abstract class BaseGenericObjectPool<T> {
                     Thread.currentThread().setContextClassLoader(cl);
                 }
 
-                // Evict from the pool
                 try {
                     evict();
                 } catch (Exception e) {
                     swallowException(e);
                 } catch (OutOfMemoryError oome) {
-                    // Log problem but give evictor thread a chance to continue
-                    // in case error is recoverable
                     oome.printStackTrace(System.err);
                 }
-                // Re-create idle instances.
                 try {
                     ensureMinIdle();
                 } catch (Exception e) {
                     swallowException(e);
                 }
             } finally {
-                // Restore the previous CCL
                 Thread.currentThread().setContextClassLoader(savedClassLoader);
             }
         }
     }
 
-    /**
-     * Maintains a cache of values for a single metric and reports statistics on the cached values.
-     */
-    private class StatsStore {
+    public abstract void evict() throws Exception;
 
-        private final AtomicLong values[];
-        private final int size;
-        private int index;
-
-        /**
-         * Create a StatsStore with the given cache size.
-         * 
-         * @param size
-         *            number of values to maintain in the cache.
-         */
-        public StatsStore(int size) {
-            this.size = size;
-            values = new AtomicLong[size];
-            for (int i = 0; i < size; i++) {
-                values[i] = new AtomicLong(-1);
-            }
-        }
-
-        /**
-         * Adds a value to the cache. If the cache is full, one of the existing values is replaced by the new value.
-         * 
-         * @param value
-         *            new value to add to the cache.
-         */
-        public synchronized void add(long value) {
-            values[index].set(value);
-            index++;
-            if (index == size) {
-                index = 0;
-            }
-        }
-
-        /**
-         * Returns the mean of the cached values.
-         * 
-         * @return the mean of the cache, truncated to long
-         */
-        public long getMean() {
-            double result = 0;
-            int counter = 0;
-            for (int i = 0; i < size; i++) {
-                long value = values[i].get();
-                if (value != -1) {
-                    counter++;
-                    result = result * ((counter - 1) / (double) counter) + value / (double) counter;
-                }
-            }
-            return (long) result;
-        }
-    }
-
-    /**
-     * The idle object eviction iterator. Holds a reference to the idle objects.
-     */
-    class EvictionIterator implements Iterator<PooledObject<T>> {
-
-        private final Deque<PooledObject<T>> idleObjects;
-        private final Iterator<PooledObject<T>> idleObjectIterator;
-
-        /**
-         * Create an EvictionIterator for the provided idle instance deque.
-         * 
-         * @param idleObjects
-         *            underlying deque
-         */
-        EvictionIterator(final Deque<PooledObject<T>> idleObjects) {
-            this.idleObjects = idleObjects;
-
-            if (getLifo()) {
-                idleObjectIterator = idleObjects.descendingIterator();
-            } else {
-                idleObjectIterator = idleObjects.iterator();
-            }
-        }
-
-        /**
-         * Returns the idle object deque referenced by this iterator.
-         * 
-         * @return the idle object deque
-         */
-        public Deque<PooledObject<T>> getIdleObjects() {
-            return idleObjects;
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public boolean hasNext() {
-            return idleObjectIterator.hasNext();
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public PooledObject<T> next() {
-            return idleObjectIterator.next();
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public void remove() {
-            idleObjectIterator.remove();
-        }
-
-    }
-
-    /**
-     * Wrapper for objects under management by the pool.
-     * 
-     * GenericObjectPool and GenericKeyedObjectPool maintain references to all objects under management using maps keyed on the objects. This wrapper class
-     * ensures that objects can work as hash keys.
-     * 
-     * @param <T>
-     *            type of objects in the pool
-     */
-    static class IdentityWrapper<T> {
-        /** Wrapped object */
-        private final T instance;
-
-        /**
-         * Create a wrapper for an instance.
-         * 
-         * @param instance
-         *            object to wrap
-         */
-        public IdentityWrapper(T instance) {
-            this.instance = instance;
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(instance);
-        }
-
-        @Override
-        @SuppressWarnings("rawtypes")
-        public boolean equals(Object other) {
-            return ((IdentityWrapper) other).instance == instance;
-        }
-
-        /**
-         * @return the wrapped object
-         */
-        public T getObject() {
-            return instance;
-        }
-    }
+    protected abstract void ensureMinIdle() throws Exception;
 
 }

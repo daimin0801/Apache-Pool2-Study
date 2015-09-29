@@ -1,4 +1,4 @@
-package bean.inter.pool;
+package bean.inter.pool.base;
 
 import java.security.AccessController;
 import java.security.PrivilegedAction;

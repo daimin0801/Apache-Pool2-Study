@@ -17,7 +17,8 @@ public class AbandonedConfig {
 
 
     /**
-     * 删除在指定时间内没有被使用废弃的对象
+     * 此时如果该连接超过removeAbandonedTimeout设置的n秒,认为该连接已被泄漏,连接池进行清理,
+     * 注意并没有放入池中,而是直接清理掉
      */
     private int removeAbandonedTimeout = 300;
 
@@ -42,7 +43,7 @@ public class AbandonedConfig {
     private boolean useUsageTracking = false;
 
 
-	public boolean isRemoveAbandonedOnBorrow() {
+	public boolean getRemoveAbandonedOnBorrow() {
 		return removeAbandonedOnBorrow;
 	}
 
@@ -52,7 +53,7 @@ public class AbandonedConfig {
 	}
 
 
-	public boolean isRemoveAbandonedOnMaintenance() {
+	public boolean getRemoveAbandonedOnMaintenance() {
 		return removeAbandonedOnMaintenance;
 	}
 
@@ -72,7 +73,7 @@ public class AbandonedConfig {
 	}
 
 
-	public boolean isLogAbandoned() {
+	public boolean getLogAbandoned() {
 		return logAbandoned;
 	}
 
@@ -92,7 +93,7 @@ public class AbandonedConfig {
 	}
 
 
-	public boolean isUseUsageTracking() {
+	public boolean getUseUsageTracking() {
 		return useUsageTracking;
 	}
 
